@@ -46,6 +46,41 @@ return res.status(500).json({ error: 'Something went wrong talking to ElevenLabs
 }
 }
 
+// Delete one knowledge document: detach it from the agent, then remove the document
+if (body && body.action === 'delete') {
+const delId = body.id;
+if (!delId) { return res.status(400).json({ error: 'No document id to delete.' }); }
+const headers = { 'xi-api-key': API_KEY, 'Content-Type': 'application/json' };
+try {
+const agentRes = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${AGENT_ID}`, { headers });
+const agent = await agentRes.json();
+if (!agentRes.ok) {
+return res.status(agentRes.status).json({ error: 'Could not read the agent', detail: agent });
+}
+const prompt = (((agent.conversation_config || {}).agent || {}).prompt) || {};
+const kb = Array.isArray(prompt.knowledge_base) ? prompt.knowledge_base : [];
+prompt.knowledge_base = kb.filter(x => x && x.id !== delId);
+const patchRes = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${AGENT_ID}`, {
+method: 'PATCH', headers,
+body: JSON.stringify({ conversation_config: { agent: { prompt } } })
+});
+const patched = await patchRes.json();
+if (!patchRes.ok) {
+return res.status(patchRes.status).json({ error: 'Could not detach the item from the agent', detail: patched });
+}
+const delRes = await fetch(`https://api.elevenlabs.io/v1/convai/knowledge-base/${delId}?force=true`, {
+method: 'DELETE', headers
+});
+if (!delRes.ok && delRes.status !== 404) {
+const detail = await delRes.json().catch(() => ({}));
+return res.status(200).json({ ok: true, detached: true, deleted: false, warning: 'Removed it from the agent, but the document could not be fully deleted.', detail });
+}
+return res.status(200).json({ ok: true, detached: true, deleted: true });
+} catch (e) {
+return res.status(500).json({ error: 'Something went wrong talking to ElevenLabs', detail: String(e) });
+}
+}
+
 if (!text || !String(text).trim()) {
 return res.status(400).json({ error: 'Nothing to teach - the text was empty.' });
 }
