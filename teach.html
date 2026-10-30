@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex" />
+<title>Teach AxolotLove</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#061826;--panel:#0e2f45;--line:rgba(255,255,255,.1);--blue:#0096FF;--gold:#FFC24B;--foam:#EAF5FC;--mist:#9FBDCE}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Nunito Sans",sans-serif;background:var(--bg);color:var(--foam);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:32px;max-width:560px;width:100%}
+  h1{font-family:"Fredoka";color:var(--gold);font-size:28px;margin-bottom:6px}
+  p.sub{color:var(--mist);font-size:15px;margin-bottom:22px}
+  label{display:block;font-weight:700;font-size:14px;margin:16px 0 6px}
+  input,textarea{width:100%;background:rgba(6,24,38,.6);border:1px solid var(--line);border-radius:12px;color:var(--foam);font-family:inherit;font-size:16px;padding:12px 14px}
+  textarea{min-height:150px;resize:vertical;line-height:1.5}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  button{font-family:"Fredoka";font-weight:600;font-size:16px;border:0;border-radius:999px;padding:13px 22px;cursor:pointer;transition:transform .15s}
+  button:hover{transform:translateY(-2px)}
+  .teach{background:var(--gold);color:#3a2a05}
+  .mic{background:rgba(255,255,255,.08);color:var(--foam);border:1px solid var(--line)}
+  .mic.live{background:var(--blue);color:#05233A}
+  .status{margin-top:18px;font-weight:700;min-height:1.4em}
+  .ok{color:#6ee7a8}.err{color:#ff8ea3}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Teach AxolotLove 🐟</h1>
+    <p class="sub">Private page. Type or speak something you want the agent to know, and it gets added to its knowledge.</p>
+
+    <label for="pw">Your password</label>
+    <input id="pw" type="password" placeholder="the ADMIN_SECRET you set in Vercel" autocomplete="off" />
+
+    <label for="topic">Topic (optional)</label>
+    <input id="topic" type="text" placeholder="e.g. Mace combat tips" />
+
+    <label for="text">What should it learn?</label>
+    <textarea id="text" placeholder="Say or type the facts here..."></textarea>
+
+    <div class="row">
+      <button class="mic" id="mic" type="button">🎤 Speak</button>
+      <button class="teach" id="teach" type="button">Teach the agent →</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+<script>
+  const $=id=>document.getElementById(id);
+  const statusEl=$('status');
+  function setStatus(msg,cls){statusEl.textContent=msg;statusEl.className='status '+(cls||'');}
+
+  // Speech-to-text (Chrome/Edge). Appends what you say to the textarea.
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const micBtn=$('mic');
+  if(!SR){ micBtn.style.display='none'; }
+  else{
+    const rec=new SR(); rec.lang='en-US'; rec.interimResults=false; rec.continuous=true;
+    let on=false;
+    micBtn.addEventListener('click',()=>{ on?rec.stop():rec.start(); });
+    rec.onstart=()=>{on=true;micBtn.classList.add('live');micBtn.textContent='● Listening (tap to stop)';};
+    rec.onend=()=>{on=false;micBtn.classList.remove('live');micBtn.textContent='🎤 Speak';};
+    rec.onerror=()=>{setStatus('Mic error - you can still type.','err');};
+    rec.onresult=e=>{
+      let add='';
+      for(let i=e.resultIndex;i<e.results.length;i++){ if(e.results[i].isFinal) add+=e.results[i][0].transcript+' '; }
+      if(add){ const t=$('text'); t.value=(t.value+' '+add).trim(); }
+    };
+  }
+
+  $('teach').addEventListener('click',async()=>{
+    const secret=$('pw').value.trim();
+    const text=$('text').value.trim();
+    const name=$('topic').value.trim();
+    if(!secret){ setStatus('Enter your password first.','err'); return; }
+    if(!text){ setStatus('Nothing to teach yet.','err'); return; }
+    setStatus('Teaching...','');
+    try{
+      const r=await fetch('/api/teach',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({secret,text,name})});
+      const d=await r.json();
+      if(r.ok&&d.ok){ setStatus('Done! Added "'+d.name+'" to the agent. 🎉','ok'); $('text').value=''; $('topic').value=''; }
+      else{ setStatus('Error: '+(d.error||'unknown'),'err'); }
+    }catch(e){ setStatus('Network error: '+e,'err'); }
+  });
+</script>
+</body>
+</html>
