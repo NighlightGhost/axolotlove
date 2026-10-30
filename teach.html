@@ -41,6 +41,11 @@ h1{font-size:clamp(30px,5vw,46px);color:var(--gold);margin:12px 0 10px;line-heig
 .status{margin-top:16px;font-weight:700;min-height:1.4em}
 .ok{color:#6ee7a8}.err{color:#ff8ea3}
 .tag{display:inline-block;background:rgba(0,150,255,.14);color:var(--blue);font-weight:800;font-size:12px;padding:4px 10px;border-radius:999px;margin-bottom:10px}
+.kblist{margin-top:12px}
+.kbrow{display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(6,24,38,.5);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:8px}
+.kbrow .nm{font-weight:700;font-size:15px;word-break:break-word}
+.kbrow button{padding:8px 14px;font-size:14px}
+.danger{background:#ff8ea3;color:#3a0a12}
 </style>
 </head>
 <body>
@@ -83,6 +88,13 @@ h1{font-size:clamp(30px,5vw,46px);color:var(--gold);margin:12px 0 10px;line-heig
 </div>
 <div class="status" id="status"></div>
 </div>
+
+<div class="card">
+<span class="tag">🗑️ Manage knowledge</span>
+<h2>Remove something it learned</h2>
+<p class="hint">Each thing you taught is saved as its own item. To fix wrong info, remove the item below, then teach the correct version above.</p>
+<div id="kbList" class="kblist"><p class="hint">Loading…</p></div>
+</div>
 </div>
 
 <script>
@@ -114,14 +126,36 @@ document.body.appendChild(s);
 }
 
 async function loadTopics(){
+const kbEl=$('kbList');
 try{
 const r=await fetch('/api/teach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret,action:'list'})});
 const d=await r.json();
 if(r.ok&&Array.isArray(d.topics)){
 const dl=$('topicList'); dl.innerHTML=''; const seen=new Set();
 d.topics.forEach(t=>{ const n=((t&&t.name)||'').trim(); const k=n.toLowerCase(); if(n&&!seen.has(k)){ seen.add(k); const o=document.createElement('option'); o.value=n; dl.appendChild(o); } });
+kbEl.innerHTML='';
+if(!d.topics.length){ kbEl.innerHTML='<p class="hint">Nothing saved yet.</p>'; return; }
+d.topics.forEach(t=>{
+const row=document.createElement('div'); row.className='kbrow';
+const nm=document.createElement('div'); nm.className='nm'; nm.textContent=(t&&t.name)||'(untitled)';
+const btn=document.createElement('button'); btn.className='ghost danger'; btn.type='button'; btn.textContent='Remove';
+btn.addEventListener('click',()=>deleteItem(t&&t.id,(t&&t.name)||'this item',btn));
+row.appendChild(nm); row.appendChild(btn); kbEl.appendChild(row);
+});
+} else { kbEl.innerHTML='<p class="hint err">Could not load the list.</p>'; }
+}catch(e){ kbEl.innerHTML='<p class="hint err">Could not load the list.</p>'; }
 }
-}catch(e){}
+
+async function deleteItem(id,label,btn){
+if(!id){ alert('This item has no id to remove.'); return; }
+if(!confirm('Remove "'+label+'"? This permanently deletes it from the agent.')){ return; }
+if(btn){ btn.disabled=true; btn.textContent='Removing...'; }
+try{
+const r=await fetch('/api/teach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret,action:'delete',id})});
+const d=await r.json();
+if(r.ok&&d.ok){ loadTopics(); }
+else{ alert('Could not remove it: '+(d.error||'unknown')); if(btn){ btn.disabled=false; btn.textContent='Remove'; } }
+}catch(e){ alert('Network error: '+e); if(btn){ btn.disabled=false; btn.textContent='Remove'; } }
 }
 
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
